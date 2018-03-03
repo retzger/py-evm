@@ -13,6 +13,9 @@ from evm.constants import (
     BLOCK_REWARD,
     UNCLE_DEPTH_PENALTY_FACTOR,
 )
+from evm.db.adapters.account import (
+    AccountDB,
+)
 from evm.exceptions import (
     ContractCreationCollision,
 )
@@ -214,6 +217,7 @@ def _make_frontier_receipt(vm_state, transaction, computation):
 
 
 class FrontierVMState(BaseVMState):
+    account_db_class = AccountDB
     block_class = FrontierBlock
     computation_class = FrontierComputation
     trie_class = HexaryTrie

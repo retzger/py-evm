@@ -27,9 +27,6 @@ from evm.exceptions import (
 from evm.db.journal import (
     JournalDB,
 )
-from evm.db.state import (
-    AccountStateDB,
-)
 from evm.rlp.headers import (
     BlockHeader,
 )
@@ -174,34 +171,10 @@ class BaseChainDB:
     #
     # Raw Database API
     #
-    def exists(self, key):
-        raise NotImplementedError("ChainDB classes must implement this method")
-
     def persist_trie_data_dict_to_db(self, trie_data_dict):
         """
         Store raw trie data to db from a dict
         """
-        raise NotImplementedError("ChainDB classes must implement this method")
-
-    #
-    # Snapshot and revert API
-    #
-    def snapshot(self):
-        raise NotImplementedError("ChainDB classes must implement this method")
-
-    def revert(self, checkpoint):
-        raise NotImplementedError("ChainDB classes must implement this method")
-
-    def commit(self, checkpoint):
-        raise NotImplementedError("ChainDB classes must implement this method")
-
-    def clear(self):
-        raise NotImplementedError("ChainDB classes must implement this method")
-
-    #
-    # State Database API
-    #
-    def get_state_db(self, state_root, read_only):
         raise NotImplementedError("ChainDB classes must implement this method")
 
 
@@ -515,36 +488,12 @@ class ChainDB(BaseChainDB):
     #
     # Raw Database API
     #
-    def exists(self, key):
-        return self.db.exists(key)
-
     def persist_trie_data_dict_to_db(self, trie_data_dict):
         """
         Store raw trie data to db from a dict
         """
         for key, value in trie_data_dict.items():
             self.db[key] = value
-
-    #
-    # Snapshot and revert API
-    #
-    def snapshot(self):
-        return self.db.snapshot()
-
-    def revert(self, checkpoint):
-        self.db.revert(checkpoint)
-
-    def commit(self, checkpoint):
-        self.db.commit(checkpoint)
-
-    def clear(self):
-        self.db.clear()
-
-    #
-    # State Database API
-    #
-    def get_state_db(self, state_root, read_only):
-        return AccountStateDB(db=self.db, root_hash=state_root, read_only=read_only)
 
 
 class AsyncChainDB(ChainDB):

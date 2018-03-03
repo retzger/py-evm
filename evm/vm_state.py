@@ -20,22 +20,29 @@ from evm.utils.state import (
 
 
 class BaseVMState(Configurable):
+    _db = None
+
     #
-    # Set from __init__
+    # Public API
     #
-    _chaindb = None
     execution_context = None
     state_root = None
     receipts = None
+    access_logs = None
 
+    #
+    # Configuration
+    #
+    account_db_class = None
     block_class = None
     computation_class = None
     trie_class = None
     transaction_context_class = None
-    access_logs = None
 
-    def __init__(self, chaindb, execution_context, state_root, receipts=[]):
-        self._chaindb = chaindb
+    def __init__(self, db, execution_context, state_root, receipts=[]):
+        self._db = db
+        self.account_db_class
+        self.state_db = self.get_db_adapater_class()(db)
         self.execution_context = execution_context
         self.state_root = state_root
         self.receipts = receipts
@@ -83,31 +90,42 @@ class BaseVMState(Configurable):
             return 0
 
     #
-    # read only state_db
+    # Account DB
     #
+    @classmethod
+    def get_account_db_class(cls):
+        if cls.account_db_class is None:
+            raise AttributeError("The `account_db_class` property has not been configured")
+        return cls.account_db_class
+
     @property
     def read_only_state_db(self):
-        return self._chaindb.get_state_db(self.state_root, read_only=True)
+        return self.get_account_db_class()(
+            db=self._db,
+            root_hash=self.state_root,
+            read_only=True,
+        )
 
-    #
-    # mutable state_db
-    #
     @contextmanager
     def mutable_state_db(self):
-        state = self._chaindb.get_state_db(self.state_root, read_only=False)
-        yield state
+        account_db = self.get_account_db_class()(
+            db=self._db,
+            root_hash=self.state_root,
+            read_only=False,
+        )
+        yield account_db
 
-        if self.state_root != state.root_hash:
-            self.set_state_root(state.root_hash)
+        if self.state_root != account_db.root_hash:
+            self.set_state_root(account_db.root_hash)
 
-        self.access_logs.reads.update(state.db.access_logs.reads)
-        self.access_logs.writes.update(state.db.access_logs.writes)
+        self.access_logs.reads.update(account_db.db.access_logs.reads)
+        self.access_logs.writes.update(account_db.db.access_logs.writes)
 
         # remove the reference to the underlying `db` object to ensure that no
         # further modifications can occur using the `State` object after
         # leaving the context.
-        state.db = None
-        state._trie = None
+        account_db.db = None
+        account_db._trie = None
 
     def set_state_root(self, state_root):
         self.state_root = state_root
@@ -122,7 +140,7 @@ class BaseVMState(Configurable):
         Snapshots are a combination of the state_root at the time of the
         snapshot and the checkpoint_id returned from the journaled DB.
         """
-        return (self.state_root, self._chaindb.snapshot())
+        return (self.state_root, self.db.snapshot())
 
     def revert(self, snapshot):
         """
@@ -135,7 +153,7 @@ class BaseVMState(Configurable):
             state_db.root_hash = state_root
 
         # now roll the underlying database back
-        self._chaindb.revert(checkpoint_id)
+        self.db.revert(checkpoint_id)
 
     def commit(self, snapshot):
         """
@@ -143,13 +161,13 @@ class BaseVMState(Configurable):
         will destroy any journal checkpoints *after* the snapshot checkpoint.
         """
         _, checkpoint_id = snapshot
-        self._chaindb.commit(checkpoint_id)
+        self.db.commit(checkpoint_id)
 
     def is_key_exists(self, key):
         """
         Check if the given key exsits in chaindb
         """
-        return self._chaindb.exists(key)
+        return self.db.exists(key)
 
     #
     # Access self.prev_hashes (Read-only)
