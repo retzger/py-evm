@@ -359,6 +359,7 @@ class Server(BaseService):
     async def do_handshake(self, peer: BasePeer) -> None:
         await peer.do_p2p_handshake(),
         await peer.do_sub_proto_handshake()
+        await peer.do_extra_handshake_checks()
         self._start_peer(peer)
 
     def _start_peer(self, peer: BasePeer) -> None:
