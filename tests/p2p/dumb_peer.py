@@ -14,3 +14,6 @@ class DumbPeer(ETHPeer):
 
     async def do_sub_proto_handshake(self):
         pass
+
+    async def do_extra_handshake_checks(self):
+        pass

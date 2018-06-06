@@ -47,6 +47,11 @@ from eth_keys import (
 )
 
 from evm.chains.mainnet import MAINNET_NETWORK_ID
+from evm.chains.mainnet.constants import (
+    DAO_FORK_BLOCK_TD,
+    DAO_FORK_HEADER_EXTRA_DATA,
+    DAO_FORK_MAINNET_BLOCK,
+)
 from evm.chains.ropsten import ROPSTEN_NETWORK_ID
 from evm.constants import GENESIS_BLOCK_NUMBER
 from evm.rlp.headers import BlockHeader
@@ -73,6 +78,7 @@ from p2p.exceptions import (
 from p2p.cancel_token import CancelToken
 from p2p.service import BaseService
 from p2p.utils import (
+    gen_request_id,
     get_devp2p_cmd_id,
     roundup_16,
     sxor,
@@ -90,6 +96,7 @@ from p2p.p2p_proto import (
 
 from .constants import (
     CONN_IDLE_TIMEOUT,
+    DAO_FORK_CHECK_TIMEOUT,
     DEFAULT_MAX_PEERS,
     HEADER_LEN,
     MAC_LEN,
@@ -132,6 +139,7 @@ async def handshake(remote: Node,
         ingress_mac=ingress_mac, headerdb=headerdb, network_id=network_id)
     await peer.do_p2p_handshake()
     await peer.do_sub_proto_handshake()
+    await peer.do_extra_handshake_checks()
     return peer
 
 
@@ -188,6 +196,14 @@ class BasePeer(BaseService):
     async def process_sub_proto_handshake(
             self, cmd: protocol.Command, msg: protocol._DecodedMsgType) -> None:
         raise NotImplementedError("Must be implemented by subclasses")
+
+    async def do_extra_handshake_checks(self):
+        """A hook for extra checks needed after the sub-protocol handshake.
+
+        Must raise HandshakeFailure if any checks are not successful and we should disconnect from
+        this peer.
+        """
+        pass
 
     def add_subscriber(self, subscriber: 'PeerPoolSubscriber') -> None:
         # TODO: Support multiple subscribers: https://github.com/ethereum/py-evm/issues/768
@@ -270,8 +286,7 @@ class BasePeer(BaseService):
     async def read(self, n: int) -> bytes:
         self.logger.debug("Waiting for %s bytes from %s", n, self.remote)
         try:
-            return await self.wait_first(
-                self.reader.readexactly(n), timeout=self.conn_idle_timeout)
+            return await self.wait(self.reader.readexactly(n), timeout=self.conn_idle_timeout)
         except (asyncio.IncompleteReadError, ConnectionResetError, BrokenPipeError) as e:
             raise PeerConnectionLost(repr(e))
 
@@ -495,6 +510,46 @@ class LESPeer(BasePeer):
         # TODO: Disconnect if the remote doesn't serve headers.
         self.head_info = cmd.as_head_info(msg)
 
+    async def do_extra_handshake_checks(self) -> None:
+        if self.network_id != MAINNET_NETWORK_ID:
+            return
+        if self.head_info.block_number < DAO_FORK_MAINNET_BLOCK:
+            return
+        try:
+            await self.wait(self._dao_fork_check(), timeout=DAO_FORK_CHECK_TIMEOUT)
+        except TimeoutError:
+            # Logging as INFO because if we start seeing this too often we might need to increase
+            # the timeout used here.
+            self.logger.info("Timed out waiting for DAO fork header from %s", self)
+            raise
+
+    async def _dao_fork_check(self) -> None:
+        # FIXME: For now we only support the pro-fork chain, but we should provide a config option
+        # for users who want to follow the no-fork chain.
+        request_id = gen_request_id()
+        self.sub_proto.send_get_block_headers(
+            DAO_FORK_MAINNET_BLOCK, max_headers=1, request_id=request_id)
+        while True:
+            cmd, msg = await self.read_msg()
+            msg = cast(Dict[str, Any], msg)
+            if not isinstance(cmd, les.BlockHeaders):
+                self.logger.debug(
+                    "Ignoring %s msg from %s as we haven't performed the DAO check yet",
+                    cmd, self)
+                continue
+            elif msg['request_id'] != request_id:
+                self.logger.debug(
+                    "Got a BlockHeaders msg with the wrong request_id (%d) from %s, ignoring",
+                    msg['request_id'], self)
+                continue
+            headers = msg['headers']
+            if len(headers) != 1:
+                raise HandshakeFailure("Unexpected response for DAO-fork check: %s", headers)
+            header = headers[0]
+            if header.extra_data != DAO_FORK_HEADER_EXTRA_DATA:
+                raise HandshakeFailure("Peer is on the other side of the DAO fork")
+            return
+
 
 class ETHPeer(BasePeer):
     _supported_sub_protocols = [eth.ETHProtocol]
@@ -525,6 +580,38 @@ class ETHPeer(BasePeer):
                     self, encode_hex(msg['genesis_hash']), genesis.hex_hash))
         self.head_td = msg['td']
         self.head_hash = msg['best_hash']
+
+    async def do_extra_handshake_checks(self):
+        if self.network_id != MAINNET_NETWORK_ID:
+            return
+        if self.head_td < DAO_FORK_BLOCK_TD:
+            return
+        try:
+            await self.wait(self._dao_fork_check(), timeout=DAO_FORK_CHECK_TIMEOUT)
+        except TimeoutError:
+            # Logging as INFO because if we start seeing this too often we might need to increase
+            # the timeout used here.
+            self.logger.info("Timed out waiting for DAO fork header from %s", self)
+            raise
+
+    async def _dao_fork_check(self) -> None:
+        # FIXME: For now we only support the pro-fork chain, but we should provide a config option
+        # for users who want to follow the no-fork chain.
+        self.sub_proto.send_get_block_headers(DAO_FORK_MAINNET_BLOCK, max_headers=1)
+        while True:
+            cmd, msg = await self.read_msg()
+            if not isinstance(cmd, eth.BlockHeaders):
+                self.logger.debug(
+                    "Ignoring %s msg from %s as we haven't performed the DAO check yet",
+                    cmd, self)
+                continue
+            msg = cast(List[BlockHeader], msg)
+            if len(msg) != 1:
+                raise HandshakeFailure("Unexpected response for DAO-fork check: %s", msg)
+            header = msg[0]
+            if header.extra_data != DAO_FORK_HEADER_EXTRA_DATA:
+                raise HandshakeFailure("Peer is on the other side of the DAO fork")
+            return
 
 
 class PeerPoolSubscriber(ABC):
@@ -624,7 +711,7 @@ class PeerPool(BaseService):
         while not self.cancel_token.triggered:
             await self.maybe_connect_to_more_peers()
             # Wait self._connect_loop_sleep seconds, unless we're asked to stop.
-            await self.wait_first(asyncio.sleep(self._connect_loop_sleep))
+            await self.wait(asyncio.sleep(self._connect_loop_sleep))
 
     async def stop_all_peers(self) -> None:
         self.logger.info("Stopping all peers ...")
@@ -765,7 +852,7 @@ class PeerPool(BaseService):
             self.logger.info("Connected peers: %d inbound, %d outbound",
                              inbound_peers, (len(self.connected_nodes) - inbound_peers))
             try:
-                await self.wait_first(asyncio.sleep(self._report_interval))
+                await self.wait(asyncio.sleep(self._report_interval))
             except OperationCancelled:
                 break
 
