@@ -9,6 +9,9 @@ ANY = 'any'
 UINT256 = 'uint256'
 BYTES = 'bytes'
 
+CONST_256 = 256
+CONST_0 = 0
+
 UINT_256_MAX = 2**256 - 1
 UINT_256_CEILING = 2**256
 UINT_255_MAX = 2**255 - 1
