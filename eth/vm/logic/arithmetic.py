@@ -1,6 +1,3 @@
-from BitVector import (
-    BitVector
-)
 from cytoolz import (
     curry,
 )
@@ -187,12 +184,13 @@ def shl(computation):
     Bitwise left shift
     """
     shift_length, value = computation.stack_pop(num_items=2, type_hint=constants.UINT256)
-    bit_vector = BitVector(intVal=value, size=constants.CONST_256)
 
     if shift_length >= constants.CONST_256:
         result = constants.CONST_0
+    elif shift_length == constants.CONST_0:
+        result = value
     else:
-        result = bit_vector.shift_left(shift_length).int_val()
+        result = (value * 2**shift_length) & constants.UINT_256_MAX
 
     computation.stack_push(result)
 
@@ -202,11 +200,12 @@ def shr(computation):
     Bitwise right shift
     """
     shift_length, value = computation.stack_pop(num_items=2, type_hint=constants.UINT256)
-    bit_vector = BitVector(intVal=value, size=constants.CONST_256)
 
     if shift_length >= constants.CONST_256:
         result = constants.CONST_0
+    elif shift_length == constants.CONST_0:
+        result = value
     else:
-        result = bit_vector.shift_right(shift_length).int_val()
+        result = (value // 2**shift_length)
 
     computation.stack_push(result)

@@ -5,7 +5,6 @@ from setuptools import setup, find_packages
 
 deps = {
     'eth': [
-        "BitVector>=3.4.8, <4.0.0",
         "cryptography>=2.0.3,<3.0.0",
         "cytoolz>=0.9.0,<1.0.0",
         "eth-bloom>=1.0.0,<2.0.0",
