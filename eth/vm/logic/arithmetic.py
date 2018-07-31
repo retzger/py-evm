@@ -195,3 +195,18 @@ def shl(computation):
         result = bit_vector.shift_left(shift_length).int_val()
 
     computation.stack_push(result)
+
+
+def shr(computation):
+    """
+    Bitwise right shift
+    """
+    shift_length, value = computation.stack_pop(num_items=2, type_hint=constants.UINT256)
+    bit_vector = BitVector(intVal=value, size=constants.CONST_256)
+
+    if shift_length >= constants.CONST_256:
+        result = constants.CONST_0
+    else:
+        result = bit_vector.shift_right(shift_length).int_val()
+
+    computation.stack_push(result)
