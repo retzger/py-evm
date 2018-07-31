@@ -143,6 +143,28 @@ async def handshake(remote: Node,
     return peer
 
 
+class PerformanceTracker:
+    average_duration: float
+    total_data_points: int
+    total_items: int
+
+    def __init__(self):
+        self.total_items = 0
+        self.total_data_points = 0
+        self.average_duration = None
+
+    def update(self, duration, count):
+        if self.average_duration is None:
+            self.average_duration = duration
+        else:
+            self.average_duration = (
+                duration + self.average_duration * self.total_data_points
+            ) / (self.total_data_points + 1)
+
+        self.total_data_points += 1
+        self.total_items += count
+
+
 class BasePeer(BaseService):
     conn_idle_timeout = CONN_IDLE_TIMEOUT
     # Must be defined in subclasses. All items here must be Protocol classes representing
@@ -161,6 +183,11 @@ class BasePeer(BaseService):
     pending_requests: Dict[
         Type[protocol.Command],
         Tuple[protocol.BaseRequest, 'asyncio.Future[protocol._DecodedMsgType]'],
+    ]
+
+    latency_tracking: Dict[
+        Type[protocol.Command],
+        PerformanceTracker,
     ]
 
     def __init__(self,
@@ -190,6 +217,7 @@ class BasePeer(BaseService):
         self.received_msgs: Dict[protocol.Command, int] = collections.defaultdict(int)
 
         self.pending_requests = {}
+        self.latency_tracking = collections.defaultdict(PerformanceTracker)
 
         self.egress_mac = egress_mac
         self.ingress_mac = ingress_mac
@@ -618,8 +646,20 @@ class LESPeer(BasePeer):
                                 max_headers: int = None,
                                 skip: int = 0,
                                 reverse: bool = True) -> Tuple[BlockHeader, ...]:
+        start_at = time.time()
         request = self.request_block_headers(block_number_or_hash, max_headers, skip, reverse)
-        return await self.wait_for_block_headers(request)
+        response = await self.wait_for_block_headers(request)
+        end_at = time.time()
+        self.latency_tracking[eth.GetBlockHeaders].update(
+            duration=end_at - start_at,
+            count=len(response),
+        )
+        return response
+
+    def get_avg_latency(self):
+        latencies = tuple(tracker.average_duration for tracker in self.latency_tracking.values())
+        avg_latency = sum(latencies) / len(latencies)
+        return avg_latency
 
 
 class ETHPeer(BasePeer):
@@ -1031,9 +1071,9 @@ class PeerPool(BaseService, AsyncIterable[BasePeer]):
                 most_received_type, count = max(
                     peer.received_msgs.items(), key=operator.itemgetter(1))
                 self.logger.debug(
-                    "%s: running=%s, uptime=%s, received_msgs=%d, most_received=%s(%d)",
+                    "%s: running=%s, uptime=%s, received_msgs=%d, most_received=%s(%d) latency:%d",
                     peer, peer.is_running, peer.uptime, peer.received_msgs_count,
-                    most_received_type, count)
+                    most_received_type, count, peer.get_avg_latency())
             self.logger.debug("== End peer details == ")
             try:
                 await self.wait(asyncio.sleep(self._report_interval))
