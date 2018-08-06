@@ -93,7 +93,6 @@ class StateDownloader(BaseService, PeerSubscriber):
     # messages related to new blocks/transactions, but we must handle requests for data from
     # other peers or else they will disconnect from us.
     subscription_msg_types: Set[Type[Command]] = {
-        commands.NodeData,
         commands.GetBlockHeaders,
         commands.GetBlockBodies,
         commands.GetReceipts,
@@ -174,28 +173,6 @@ class StateDownloader(BaseService, PeerSubscriber):
 
         if isinstance(cmd, ignored_commands):
             pass
-        elif isinstance(cmd, commands.NodeData):
-            msg = cast(List[bytes], msg)
-            if peer not in self.request_tracker.active_requests:
-                # This is probably a batch that we retried after a timeout and ended up receiving
-                # more than once, so ignore but log as an INFO just in case.
-                self.logger.info(
-                    "Got %d NodeData entries from %s that were not expected, ignoring them",
-                    len(msg), peer)
-                return
-
-            self.logger.debug("Got %d NodeData entries from %s", len(msg), peer)
-            _, requested_node_keys = self.request_tracker.active_requests.pop(peer)
-
-            loop = asyncio.get_event_loop()
-            node_keys = await loop.run_in_executor(self._executor, list, map(keccak, msg))
-
-            missing = set(requested_node_keys).difference(node_keys)
-            self._peer_missing_nodes[peer].update(missing)
-            if missing:
-                await self.request_nodes(missing)
-
-            await self._process_nodes(zip(node_keys, msg))
         elif isinstance(cmd, commands.GetBlockHeaders):
             query = cast(Dict[Any, Union[bool, int]], msg)
             request = HeaderRequest(
@@ -252,8 +229,9 @@ class StateDownloader(BaseService, PeerSubscriber):
             batch = candidates[:eth_constants.MAX_STATE_FETCH]
             not_yet_requested = not_yet_requested.difference(batch)
             self.request_tracker.active_requests[peer] = (time.time(), batch)
+            asyncio.ensure_future(self._request_and_process_nodes(peer, batch))
 
-    async def _request_and_process_nodes(self, peer: ETHPeer, node_keys: Iterable[Hash32]) -> None:
+    async def _request_and_process_nodes(self, peer: ETHPeer, batch: Iterable[Hash32]) -> None:
         self.logger.debug("Requesting %d trie nodes from %s", len(batch), peer)
         nodes = await peer.requests.get_node_data(batch)
 
@@ -261,14 +239,29 @@ class StateDownloader(BaseService, PeerSubscriber):
         _, requested_node_keys = self.request_tracker.active_requests.pop(peer)
 
         loop = asyncio.get_event_loop()
-        node_keys = await loop.run_in_executor(self._executor, list, map(keccak, msg))
+        node_keys = await loop.run_in_executor(self._executor, list, map(keccak, nodes))
 
-        missing = set(requested_node_keys).difference(node_keys)
+        # check for missing nodes and re-schedule them
+        missing = set(batch).difference(node_keys)
+
         self._peer_missing_nodes[peer].update(missing)
         if missing:
             await self.request_nodes(missing)
 
-        await self._process_nodes(zip(node_keys, msg))
+        # check for unexpected nodes and log if there are any
+        unexpected = set(node_keys).difference(batch)
+        if unexpected:
+            self.logger.debug("Got %d unexpected NodeData entries from %s", len(nodes), peer)
+
+        to_process = tuple(
+            (node_key, node)
+            for node_key, node
+            in zip(node_keys, nodes)
+            if node_key not in unexpected
+        )
+
+        if to_process:
+            await self._process_nodes(to_process)
 
     async def _periodically_retry_timedout_and_missing(self) -> None:
         while self.is_running:
