@@ -34,6 +34,7 @@ from .commands import (
 from . import constants
 from .requests import (
     HeaderRequest,
+    NodeDataRequest,
 )
 
 if TYPE_CHECKING:
@@ -64,12 +65,12 @@ class ETHProtocol(Protocol):
         self.logger.debug("Sending ETH/Status msg: %s", resp)
         self.send(*cmd.encode(resp))
 
-    def send_get_node_data(self, node_hashes: List[Hash32]) -> None:
+    def send_get_node_data(self, request: NodeDataRequest) -> None:
         cmd = GetNodeData(self.cmd_id_offset)
-        header, body = cmd.encode(node_hashes)
+        header, body = cmd.encode(request.node_hashes)
         self.send(header, body)
 
-    def send_node_data(self, nodes: List[bytes]) -> None:
+    def send_node_data(self, nodes) -> None:
         cmd = NodeData(self.cmd_id_offset)
         header, body = cmd.encode(nodes)
         self.send(header, body)
