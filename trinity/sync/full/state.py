@@ -252,8 +252,23 @@ class StateDownloader(BaseService, PeerSubscriber):
             batch = candidates[:eth_constants.MAX_STATE_FETCH]
             not_yet_requested = not_yet_requested.difference(batch)
             self.request_tracker.active_requests[peer] = (time.time(), batch)
-            self.logger.debug("Requesting %d trie nodes to %s", len(batch), peer)
-            peer.sub_proto.send_get_node_data(batch)
+
+    async def _request_and_process_nodes(self, peer: ETHPeer, node_keys: Iterable[Hash32]) -> None:
+        self.logger.debug("Requesting %d trie nodes from %s", len(batch), peer)
+        nodes = await peer.requests.get_node_data(batch)
+
+        self.logger.debug("Got %d NodeData entries from %s", len(nodes), peer)
+        _, requested_node_keys = self.request_tracker.active_requests.pop(peer)
+
+        loop = asyncio.get_event_loop()
+        node_keys = await loop.run_in_executor(self._executor, list, map(keccak, msg))
+
+        missing = set(requested_node_keys).difference(node_keys)
+        self._peer_missing_nodes[peer].update(missing)
+        if missing:
+            await self.request_nodes(missing)
+
+        await self._process_nodes(zip(node_keys, msg))
 
     async def _periodically_retry_timedout_and_missing(self) -> None:
         while self.is_running:
