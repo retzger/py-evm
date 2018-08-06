@@ -10,6 +10,7 @@ from eth_typing import (
 )
 
 from eth.rlp.headers import BlockHeader
+from eth.rlp.receipts import Receipt
 
 from p2p.protocol import (
     Command,
@@ -22,10 +23,12 @@ from trinity.protocol.common.managers import (
 from .commands import (
     BlockHeaders,
     NodeData,
+    Receipts,
 )
 from .requests import (
     HeaderRequest,
     NodeDataRequest,
+    ReceiptsRequest,
 )
 
 if TYPE_CHECKING:
@@ -92,4 +95,32 @@ class GetNodeDataRequestManager(BaseGetNodeDataRequestManager):
         self._peer.sub_proto.send_get_node_data(request)
 
     def _normalize_response(self, response: Tuple[bytes, ...]) -> Tuple[bytes, ...]:
+        return response
+
+
+BaseGetReceiptsRequestManager = BaseRequestManager[
+    'ETHPeer',
+    ReceiptsRequest,
+    Tuple[Tuple[Receipt, ...], ...],
+    Tuple[Tuple[Receipt, ...], ...],
+]
+
+
+class GetReceiptsRequestManager(BaseGetNodeDataRequestManager):
+    msg_queue_maxsize = 100
+
+    _response_msg_type: Type[Command] = Receipts
+
+    async def __call__(self,  # type: ignore
+                       block_hashes: Tuple[Hash32, ...],
+                       timeout: int = None) -> Tuple[bytes, ...]:
+        request = ReceiptsRequest(block_hashes)
+        return await self._request_and_wait(request, timeout)
+
+    def _send_sub_proto_request(self, request: ReceiptsRequest) -> None:
+        self._peer.sub_proto.send_get_receipts(request)
+
+    def _normalize_response(self,
+                            response: Tuple[Tuple[Receipt, ...]]
+                            ) -> Tuple[Tuple[Receipt, ...]]:
         return response
