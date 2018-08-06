@@ -5,6 +5,8 @@ from typing import (
     TYPE_CHECKING,
 )
 
+from eth_typing import Hash32
+
 from eth.rlp.headers import BlockHeader
 from eth.rlp.receipts import Receipt
 from eth.rlp.transactions import BaseTransactionFields
@@ -62,7 +64,7 @@ class ETHProtocol(Protocol):
         self.logger.debug("Sending ETH/Status msg: %s", resp)
         self.send(*cmd.encode(resp))
 
-    def send_get_node_data(self, node_hashes: List[bytes]) -> None:
+    def send_get_node_data(self, node_hashes: List[Hash32]) -> None:
         cmd = GetNodeData(self.cmd_id_offset)
         header, body = cmd.encode(node_hashes)
         self.send(header, body)
@@ -102,7 +104,7 @@ class ETHProtocol(Protocol):
         header, body = cmd.encode(headers)
         self.send(header, body)
 
-    def send_get_block_bodies(self, block_hashes: List[bytes]) -> None:
+    def send_get_block_bodies(self, block_hashes: List[Hash32]) -> None:
         cmd = GetBlockBodies(self.cmd_id_offset)
         header, body = cmd.encode(block_hashes)
         self.send(header, body)
@@ -112,7 +114,7 @@ class ETHProtocol(Protocol):
         header, body = cmd.encode(blocks)
         self.send(header, body)
 
-    def send_get_receipts(self, block_hashes: List[bytes]) -> None:
+    def send_get_receipts(self, block_hashes: List[Hash32]) -> None:
         cmd = GetReceipts(self.cmd_id_offset)
         header, body = cmd.encode(block_hashes)
         self.send(header, body)

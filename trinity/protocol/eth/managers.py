@@ -4,7 +4,10 @@ from typing import (
     TYPE_CHECKING,
 )
 
-from eth_typing import BlockIdentifier
+from eth_typing import (
+    BlockIdentifier,
+    Hash32,
+)
 
 from eth.rlp.headers import BlockHeader
 
@@ -13,17 +16,23 @@ from p2p.protocol import (
 )
 
 from trinity.protocol.common.managers import (
-    BaseRequestManager as _BaseRequestManager,
+    BaseRequestManager,
 )
 
-from .commands import BlockHeaders
-from .requests import HeaderRequest
+from .commands import (
+    BlockHeaders,
+    NodeData,
+)
+from .requests import (
+    HeaderRequest,
+    NodeDataRequest,
+)
 
 if TYPE_CHECKING:
     from .peer import ETHPeer  # noqa: F401
 
 
-BaseRequestManager = _BaseRequestManager[
+BaseGetBlockHeadersRequestManager = BaseRequestManager[
     'ETHPeer',
     HeaderRequest,
     Tuple[BlockHeader, ...],
@@ -31,7 +40,7 @@ BaseRequestManager = _BaseRequestManager[
 ]
 
 
-class GetBlockHeadersRequestManager(BaseRequestManager):
+class GetBlockHeadersRequestManager(BaseGetBlockHeadersRequestManager):
     msg_queue_maxsize = 100
 
     _response_msg_type: Type[Command] = BlockHeaders
@@ -57,4 +66,30 @@ class GetBlockHeadersRequestManager(BaseRequestManager):
         self._peer.sub_proto.send_get_block_headers(request)
 
     def _normalize_response(self, response: Tuple[BlockHeader, ...]) -> Tuple[BlockHeader, ...]:
+        return response
+
+
+BaseGetNodeDataRequestManager = BaseRequestManager[
+    'ETHPeer',
+    NodeDataRequest,
+    Tuple[bytes, ...],
+    Tuple[bytes, ...],
+]
+
+
+class GetNodeDataRequestManager(BaseGetNodeDataRequestManager):
+    msg_queue_maxsize = 100
+
+    _response_msg_type: Type[Command] = NodeData
+
+    async def __call__(self,  # type: ignore
+                       node_hashes: Tuple[Hash32, ...],
+                       timeout: int = None) -> Tuple[bytes, ...]:
+        request = NodeDataRequest(node_hashes)
+        return await self._request_and_wait(request, timeout)
+
+    def _send_sub_proto_request(self, request: NodeDataRequest) -> None:
+        self._peer.sub_proto.send_get_node_data(request)
+
+    def _normalize_response(self, response: Tuple[bytes, ...]) -> Tuple[bytes, ...]:
         return response
