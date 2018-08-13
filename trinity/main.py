@@ -294,6 +294,7 @@ async def exit_on_signal(service_to_exit: BaseService) -> None:
     await sigint_received.wait()
     try:
         await service_to_exit.cancel()
+        service_to_exit._executor.shutdown(wait=True)
     finally:
         loop.stop()
 
