@@ -143,6 +143,7 @@ class DiscoveryProtocol(asyncio.DatagramProtocol):
         self.neighbours_callbacks = CallbackManager()
         self.parity_pong_tokens: Dict[Hash32, Hash32] = {}
         self.cancel_token = cancel_token
+        BaseService.log_token_ancestry(self, self.cancel_token)
 
     def update_routing_table(self, node: kademlia.Node) -> None:
         """Update the routing table entry for the given node."""
@@ -396,6 +397,7 @@ class DiscoveryProtocol(asyncio.DatagramProtocol):
 
     async def stop(self) -> None:
         self.logger.info('stopping discovery')
+        BaseService.log_token_ancestry(self, self.cancel_token)
         self.cancel_token.trigger()
         self.transport.close()
         # We run lots of asyncio tasks so this is to make sure they all get a chance to execute
