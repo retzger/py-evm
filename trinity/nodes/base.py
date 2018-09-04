@@ -62,6 +62,8 @@ class Node(BaseService):
 
         self._jsonrpc_ipc_path: Path = chain_config.jsonrpc_ipc_path
 
+        self.log_token_ancestry(self, self.cancel_token)
+
     @abstractmethod
     def get_chain(self) -> BaseChain:
         raise NotImplementedError("Node classes must implement this method")

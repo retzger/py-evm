@@ -768,6 +768,8 @@ class DiscoveryService(BaseService):
         self.peer_pool = peer_pool
         self.port = port
 
+        self.log_token_ancestry(self, self.cancel_token)
+
     async def _run(self) -> None:
         await self._start_udp_listener()
         connect_loop_sleep = 2
@@ -818,6 +820,7 @@ class DiscoveryService(BaseService):
 
     async def _cleanup(self) -> None:
         await self.proto.stop()
+        self.log_token_ancestry(self, self.cancel_token)
 
 
 @to_list

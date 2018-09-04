@@ -255,6 +255,8 @@ class ExchangeManager(Generic[TRequestPayload, TResponsePayload, TResult]):
                     result,
                 )
                 stream.complete_request()
+                #self.service.logger.info('TRIGGERING CANCELLING PEER TOKEN %s', self._response_stream._peer)
+                #self._response_stream._peer.cancel_token.trigger()
                 return result
 
         raise ValidationError("Manager is not pending a response, but no valid response received")

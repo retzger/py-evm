@@ -32,6 +32,17 @@ class ServiceEvents:
         self.finished = asyncio.Event()
 
 
+def log_token_ancestry(service, token, level=0):
+    if level == 0:
+        service.logger.info('TOKEN ANCESTRY FOR: %s', service)
+    prefix = '  ' * max(0, level - 1) + ' -'
+    service.logger.info("%s TOKEN: %r (%d)", prefix, token, id(token))
+    for child in token._chain:
+        service.logger.info("%s PARENT: %r (%d)", '  ' + prefix, child, id(child))
+        if child._chain:
+            log_token_ancestry(service, child, level + 1)
+
+
 class BaseService(ABC, CancellableMixin):
     logger: TraceLogger = None
     # Use a WeakSet so that we don't have to bother updating it when tasks finish.
@@ -39,7 +50,7 @@ class BaseService(ABC, CancellableMixin):
     _tasks: 'WeakSet[asyncio.Future[Any]]'
     _finished_callbacks: List[Callable[['BaseService'], None]]
     # Number of seconds cancel() will wait for run() to finish.
-    _wait_until_finished_timeout = 5
+    _wait_until_finished_timeout = 10
 
     # the custom event loop to run in, or None if the default loop should be used
     _loop: asyncio.AbstractEventLoop = None
@@ -81,6 +92,8 @@ class BaseService(ABC, CancellableMixin):
         else:
             return self._loop
 
+    log_token_ancestry = staticmethod(log_token_ancestry)
+
     async def run(
             self,
             finished_callback: Optional[Callable[['BaseService'], None]] = None) -> None:
@@ -103,6 +116,7 @@ class BaseService(ABC, CancellableMixin):
                 await self._run()
         except OperationCancelled as e:
             self.logger.debug("%s finished: %s", self, e)
+            self.log_token_ancestry(self, self.cancel_token)
         except Exception:
             self.logger.exception("Unexpected error in %r, exiting", self)
         finally:
@@ -175,6 +189,7 @@ class BaseService(ABC, CancellableMixin):
 
         self._child_services.add(service)
 
+        @functools.wraps(service.run)
         async def _run_daemon_wrapper() -> None:
             try:
                 await service.run()

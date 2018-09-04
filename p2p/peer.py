@@ -803,7 +803,6 @@ class PeerPool(BaseService, AsyncIterable[BasePeer]):
                 handshake(
                     remote, self.privkey, self.peer_class, self.headerdb, self.network_id,
                     self.cancel_token))
-
             return peer
         except OperationCancelled:
             # Pass it on to instruct our main loop to stop.
