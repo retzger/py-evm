@@ -277,7 +277,6 @@ PRE_STATE_CLEARING_VMS = (
     FrontierVMForTesting,
     HomesteadVMForTesting,
     TangerineWhistleVMForTesting,
-    SpuriousDragonVMForTesting,
 )
 
 
