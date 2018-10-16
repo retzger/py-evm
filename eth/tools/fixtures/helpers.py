@@ -10,7 +10,7 @@ from eth_utils import (
 
 from eth import MainnetChain
 from eth.db.atomic import AtomicDB
-from eth.tools.builder.chain import (
+from eth.tools.builder.chain.builders import (
     disable_pow_check,
 )
 from eth.utils.state import (
