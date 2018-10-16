@@ -327,9 +327,13 @@ def test_state_fixtures(fixture, fixture_vm_class):
         receipts = vm.block.get_receipts(chaindb) + (receipt, )
         block = vm.set_block_transactions(vm.block, header, transactions, receipts)
     except ValidationError as err:
-        state.account_db.set_balance(vm.block.header.coinbase, 0)
-        state.account_db.persist()
-        vm.block = vm.block.copy(header=vm.block.header.copy(state_root=state.state_root))
+        # This feels terribly wrong
+        coinbase_balance = state.account_db.get_balance(vm.block.header.coinbase)
+        if coinbase_balance == 0:
+            state.account_db.set_balance(vm.block.header.coinbase, 0)
+            state.account_db.persist()
+            vm.block = vm.block.copy(header=vm.block.header.copy(state_root=state.state_root))
+
         block = vm.block
         transaction_error = err
         logger.warning("Got transaction error", exc_info=True)
