@@ -355,6 +355,11 @@ def test_state_fixtures(fixture, fixture_vm_class):
             state.account_db.touch_account(vm.block.header.coinbase)
             state.account_db.persist()
             vm.block = vm.block.copy(header=vm.block.header.copy(state_root=state.state_root))
+        elif state.account_db.account_is_empty(vm.block.header.coinbase):
+            state.account_db.delete_account(vm.block.header.coinbase)
+            state.account_db.persist()
+            vm.block = vm.block.copy(header=vm.block.header.copy(state_root=state.state_root))
+
         block = vm.block
 
     if not transaction_error:
