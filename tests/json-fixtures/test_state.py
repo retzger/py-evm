@@ -273,6 +273,14 @@ def fixture_vm_class(fixture_data):
         raise ValueError("Unknown Fork Name: {0}".format(fork_name))
 
 
+PRE_STATE_CLEARING_VMS = (
+    FrontierVMForTesting,
+    HomesteadVMForTesting,
+    TangerineWhistleVMForTesting,
+    SpuriousDragonVMForTesting,
+)
+
+
 def test_state_fixtures(fixture, fixture_vm_class):
     header = BlockHeader(
         coinbase=fixture['env']['currentCoinbase'],
@@ -320,25 +328,29 @@ def test_state_fixtures(fixture, fixture_vm_class):
             r=r,
             s=s,
         )
+    else:
+        raise Exception("Invariant: No transaction specified")
 
     try:
         header, receipt, computation = vm.apply_transaction(vm.block.header, transaction)
-        transactions = vm.block.transactions + (transaction, )
-        receipts = vm.block.get_receipts(chaindb) + (receipt, )
-        block = vm.set_block_transactions(vm.block, header, transactions, receipts)
     except ValidationError as err:
-        # This feels terribly wrong
-        coinbase_balance = state.account_db.get_balance(vm.block.header.coinbase)
-        if coinbase_balance == 0:
-            state.account_db.set_balance(vm.block.header.coinbase, 0)
+        # Transaction is fully invalid....
+        # INSANITY: https://github.com/ethereum/go-ethereum/commit/32f28a9360d26a661d55915915f12fd3c70f012b#diff-f53696be8527ac422b8d4de7c8e945c1R149
+        if isinstance(vm, PRE_STATE_CLEARING_VMS):
+            state.account_db.touch_account(vm.block.header.coinbase)
             state.account_db.persist()
             vm.block = vm.block.copy(header=vm.block.header.copy(state_root=state.state_root))
 
-        block = vm.block
-        transaction_error = err
         logger.warning("Got transaction error", exc_info=True)
+        block = vm.block
+
+        transaction_error = err
     else:
         transaction_error = False
+
+        transactions = vm.block.transactions + (transaction, )
+        receipts = vm.block.get_receipts(chaindb) + (receipt, )
+        block = vm.set_block_transactions(vm.block, header, transactions, receipts)
 
     if not transaction_error:
         log_entries = computation.get_log_entries()
