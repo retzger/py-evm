@@ -71,6 +71,8 @@ def normalize_bytes(value):
         return value
     elif is_text(value) and is_hex(value):
         return decode_hex(value)
+    elif is_text(value):
+        return b''
     else:
         raise TypeError("Value must be either a string or bytes object")
 
