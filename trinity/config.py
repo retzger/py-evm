@@ -36,7 +36,6 @@ from trinity.utils.chains import (
     get_database_base_dir,
     get_database_dir,
     get_database_engine_marker_path,
-    get_database_socket_path,
     get_data_dir_for_network_id,
     get_jsonrpc_socket_path,
     get_logfile_path,
@@ -226,13 +225,6 @@ class TrinityConfig:
             return None
         else:
             return self.database_engine_marker_path.read_text().strip()
-
-    @property
-    def database_ipc_path(self) -> Path:
-        """
-        Path for the database IPC socket connection.
-        """
-        return get_database_socket_path(self.data_dir)
 
     @property
     def jsonrpc_ipc_path(self) -> Path:

@@ -1,8 +1,5 @@
 from abc import abstractmethod
 from pathlib import Path
-from multiprocessing.managers import (
-    BaseManager,
-)
 from typing import (
     Type,
 )
@@ -19,11 +16,8 @@ from p2p.service import (
     BaseService,
 )
 
-from trinity.db.header import (
-    AsyncHeaderDB,
-)
 from trinity.db.manager import (
-    create_db_manager
+    get_database_connection,
 )
 from trinity.config import (
     TrinityConfig,
@@ -46,9 +40,8 @@ class Node(BaseService):
 
     def __init__(self, event_bus: Endpoint, trinity_config: TrinityConfig) -> None:
         super().__init__()
-        self._db_manager = create_db_manager(trinity_config.database_ipc_path)
-        self._db_manager.connect()
-        self._headerdb = self._db_manager.get_headerdb()  # type: ignore
+
+        self.db_connection = get_database_connection(trinity_config)
 
         self._jsonrpc_ipc_path: Path = trinity_config.jsonrpc_ipc_path
         self._network_id = trinity_config.network_id
@@ -89,14 +82,6 @@ class Node(BaseService):
         It's typically responsible for syncing the chain, with peer connections.
         """
         raise NotImplementedError("Node classes must implement this method")
-
-    @property
-    def db_manager(self) -> BaseManager:
-        return self._db_manager
-
-    @property
-    def headerdb(self) -> AsyncHeaderDB:
-        return self._headerdb
 
     def notify_resource_available(self) -> None:
 

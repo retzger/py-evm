@@ -1,7 +1,6 @@
 from argparse import ArgumentParser, Namespace
 import asyncio
 import logging
-import signal
 from typing import (
     Any,
     Dict,
@@ -14,7 +13,6 @@ from lahja import (
 
 from p2p.service import BaseService
 
-from trinity.db.manager import get_chaindb_manager
 from trinity.exceptions import (
     AmbigiousFileSystem,
     MissingPath,
@@ -49,7 +47,6 @@ from trinity.plugins.registry import (
     ENABLED_PLUGINS
 )
 from trinity.utils.ipc import (
-    wait_for_ipc,
     kill_process_gracefully,
 )
 from trinity.utils.logging import (
@@ -234,30 +231,11 @@ def trinity_boot(args: Namespace,
     networking_endpoint = event_bus.create_endpoint(NETWORKING_EVENTBUS_ENDPOINT)
     event_bus.start()
 
-    # First initialize the database process.
-    database_server_process = ctx.Process(
-        target=run_database_process,
-        args=(trinity_config,),
-        kwargs=extra_kwargs,
-    )
-
     networking_process = ctx.Process(
         target=launch_node,
         args=(args, trinity_config, networking_endpoint,),
         kwargs=extra_kwargs,
     )
-
-    # start the processes
-    database_server_process.start()
-    logger.info("Started DB server process (pid=%d)", database_server_process.pid)
-
-    # networking process needs the IPC socket file provided by the database process
-    try:
-        wait_for_ipc(trinity_config.database_ipc_path)
-    except TimeoutError as e:
-        logger.error("Timeout waiting for database to start.  Exiting...")
-        kill_process_gracefully(database_server_process, logger)
-        ArgumentParser().error(message="Timed out waiting for database start")
 
     networking_process.start()
     logger.info("Started networking process (pid=%d)", networking_process.pid)
@@ -266,7 +244,6 @@ def trinity_boot(args: Namespace,
         ShutdownRequest,
         lambda ev: kill_trinity_gracefully(
             logger,
-            database_server_process,
             networking_process,
             plugin_manager,
             main_endpoint,
@@ -284,7 +261,6 @@ def trinity_boot(args: Namespace,
     except KeyboardInterrupt:
         kill_trinity_gracefully(
             logger,
-            database_server_process,
             networking_process,
             plugin_manager,
             main_endpoint,
@@ -294,19 +270,11 @@ def trinity_boot(args: Namespace,
 
 
 def kill_trinity_gracefully(logger: logging.Logger,
-                            database_server_process: Any,
                             networking_process: Any,
                             plugin_manager: PluginManager,
                             main_endpoint: Endpoint,
                             event_bus: EventBus,
                             reason: str=None) -> None:
-    # When a user hits Ctrl+C in the terminal, the SIGINT is sent to all processes in the
-    # foreground *process group*, so both our networking and database processes will terminate
-    # at the same time and not sequentially as we'd like. That shouldn't be a problem but if
-    # we keep getting unhandled BrokenPipeErrors/ConnectionResetErrors like reported in
-    # https://github.com/ethereum/py-evm/issues/827, we might want to change the networking
-    # process' signal handler to wait until the DB process has terminated before doing its
-    # thing.
     # Notice that we still need the kill_process_gracefully() calls here, for when the user
     # simply uses 'kill' to send a signal to the main process, but also because they will
     # perform a non-gracefull shutdown if the process takes too long to terminate.
@@ -316,37 +284,16 @@ def kill_trinity_gracefully(logger: logging.Logger,
     plugin_manager.shutdown_blocking()
     main_endpoint.stop()
     event_bus.stop()
-    for name, process in [("DB", database_server_process), ("Networking", networking_process)]:
-        # Our sub-processes will have received a SIGINT already (see comment above), so here we
-        # wait 2s for them to finish cleanly, and if they fail we kill them for real.
-        process.join(2)
-        if process.is_alive():
-            kill_process_gracefully(process, logger)
-        logger.info('%s process (pid=%d) terminated', name, process.pid)
+
+    # The networking process will have received a SIGINT already (see comment
+    # above), so here we wait 2s for it to finish cleanly, and if that fails
+    # we kill it.
+    networking_process.join(2)
+    if networking_process.is_alive():
+        kill_process_gracefully(networking_process, logger)
+    logger.info('Networking process (pid=%d) terminated', networking_process.pid)
 
     ArgumentParser().exit(message=f"Trinity shutdown complete {hint}\n")
-
-
-@setup_cprofiler('run_database_process')
-@with_queued_logging
-def run_database_process(trinity_config: TrinityConfig) -> None:
-    with trinity_config.process_id_file('database'):
-
-        base_db = trinity_config.db_class(db_path=trinity_config.database_dir)
-
-        manager = get_chaindb_manager(trinity_config, base_db)
-        server = manager.get_server()  # type: ignore
-
-        def _sigint_handler(*args: Any) -> None:
-            server.stop_event.set()
-
-        signal.signal(signal.SIGINT, _sigint_handler)
-
-        try:
-            server.serve_forever()
-        except SystemExit:
-            server.stop_event.set()
-            raise
 
 
 @setup_cprofiler('launch_node')

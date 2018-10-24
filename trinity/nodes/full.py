@@ -38,7 +38,7 @@ class FullNode(Node):
                 self._node_port,
                 manager.get_chain(),  # type: ignore
                 manager.get_chaindb(),  # type: ignore
-                self.headerdb,
+                self.db_connection.headerdb,
                 manager.get_db(),  # type: ignore
                 self._network_id,
                 max_peers=self._max_peers,
