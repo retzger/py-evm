@@ -1,6 +1,44 @@
 Trinity 
 =======
 
+0.1.0-alpha.17
+--------------
+
+Released November 20, 2018
+
+- `#TODO <https://github.com/ethereum/py-evm/pull/TODO>`_: TODO: TODO
+- `#TODO <https://github.com/ethereum/py-evm/pull/TODO>`_: TODO: TODO
+- `#TODO <https://github.com/ethereum/py-evm/pull/TODO>`_: TODO: TODO
+- `#TODO <https://github.com/ethereum/py-evm/pull/TODO>`_: TODO: TODO
+- `#TODO <https://github.com/ethereum/py-evm/pull/TODO>`_: TODO: TODO
+- `#TODO <https://github.com/ethereum/py-evm/pull/TODO>`_: TODO: TODO
+- `#1443 <https://github.com/ethereum/py-evm/pull/1443>`_: Maintenance: Merge the ``--nodekey`` and ``--nodekey-path`` flags.
+- `#1438 <https://github.com/ethereum/py-evm/pull/1438>`_: Bugfix: Remove warnings when printing the ASCII Trinity header
+- `#1437 <https://github.com/ethereum/py-evm/pull/1437>`_: Maintenance: Update to use f-strings for string formatting
+- `#1435 <https://github.com/ethereum/py-evm/pull/1435>`_: Maintenance: Enable Constantinople fork on Ropsten chain
+- `#1434 <https://github.com/ethereum/py-evm/pull/1434>`_: Bugfix: Fix incorrect mainnet genesis parameters.
+- `#1421 <https://github.com/ethereum/py-evm/pull/1421>`_: Maintenance: Implement ``eth_syncing`` JSON-RPC endpoint
+- `#1410 <https://github.com/ethereum/py-evm/pull/1410>`_: Maintenance: Implement EIP1283 for updated logic for ``SSTORE`` opcode gas costs.
+- `#1395 <https://github.com/ethereum/py-evm/pull/1395>`_: Bugfix: Fix gas cost calculations for ``CREATE2`` opcode
+- `#1386 <https://github.com/ethereum/py-evm/pull/1386>`_: Maintenance: Trinity now prints a message to make it more clear why Trinity was shutdown.
+- `#1387 <https://github.com/ethereum/py-evm/pull/1387>`_: Maintenance: Use colorized output for ``WARNING`` and ``ERROR`` level logging messages.
+- `#1378 <https://github.com/ethereum/py-evm/pull/1378>`_: Bugfix: Fix address generation for ``CREATE2`` opcode.
+- `#1374 <https://github.com/ethereum/py-evm/pull/1374>`_: Maintenance: New ``ChainTipMonitor`` service to keep track of the highest TD chain tip.
+- `#1371 <https://github.com/ethereum/py-evm/pull/1371>`_: Maintenance: Upgrade ``mypy`` to ``0.630``
+- `#1367 <https://github.com/ethereum/py-evm/pull/1367>`_: Maintenance: Improve logging output to include more contextual information
+- `#1361 <https://github.com/ethereum/py-evm/pull/1361>`_: Maintenance: Remove ``HeaderRequestingPeer`` in favor of ``BaseChainPeer``
+- `#1353 <https://github.com/ethereum/py-evm/pull/1353>`_: Maintenance: Decouple peer message handling from syncing.
+- `#1351 <https://github.com/ethereum/py-evm/pull/1351>`_: Bugfix: Unhandled ``DecryptionError``
+- `#1348 <https://github.com/ethereum/py-evm/pull/1348>`_: Maintenance: Add default server URIs for mainnet and ropsten.
+- `#1347 <https://github.com/ethereum/py-evm/pull/1347>`_: Maintenance: Improve code organization within ``trinity`` module
+- `#1343 <https://github.com/ethereum/py-evm/pull/1343>`_: Bugfix: Rename ``Chain.network_id`` to be ``Chain.chain_id``
+- `#1342 <https://github.com/ethereum/py-evm/pull/1342>`_: Maintenance: Internal rename of ``ChainConfig`` to ``TrinityConfig``
+- `#1336 <https://github.com/ethereum/py-evm/pull/1336>`_: Maintenance: Implement plugin for EthStats reporting.
+- `#1335 <https://github.com/ethereum/py-evm/pull/1335>`_: Maintenance: Relax some constraints on the ordered task management constructs.
+- `#1332 <https://github.com/ethereum/py-evm/pull/1332>`_: Maintenance: Upgrade ``pyrlp`` to ``1.0.3``
+- `#1317 <https://github.com/ethereum/py-evm/pull/1317>`_: Maintenance: Extract peer selection from the header sync.
+- `#1312 <https://github.com/ethereum/py-evm/pull/1312>`_: Maintenance: Turn on warnings by default if in a prerelease
+
 0.1.0-alpha.16
 --------------
 
