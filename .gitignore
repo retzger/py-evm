@@ -47,6 +47,7 @@ docs/modules.rst
 
 # fixtures
 ./fixtures/**
+./ewasm-fixtures/**
 
 # profiling
 prof/**

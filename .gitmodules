@@ -1,3 +1,6 @@
 [submodule "fixtures"]
 	path = fixtures
 	url = https://github.com/ethereum/tests.git
+[submodule "ewasm-fixtures"]
+	path = ewasm-fixtures
+	url = git@github.com:ewasm/tests.git
