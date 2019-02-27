@@ -123,26 +123,45 @@ def create_debug_module():
     pass
 
 
-def useGas(config: Configuration) -> None:
-    pass
+def useGas(config: Configuration, *args) -> None:
+    assert False
 
 
-def getAddress(config: Configuration) -> None:
-    pass
+def getAddress(config: Configuration, *args) -> None:
+    assert False
+
+
+def storageStore(config: Configuration, *args) -> None:
+    assert False
+
+
+def callCode(config: Configuration, *args) -> None:
+    assert False
 
 
 params_i64_results_none = FunctionType(
-    (ValType.i64,),
+    (EEIValType.i64,),
     (),
 )
 params_i32_results_none = FunctionType(
-    (ValType.i32,),
+    (EEIValType.i32,),
     (),
 )
+params_i32_i32_results_none = FunctionType(
+    (ValType.i32, ValType.i32),
+    (),
+)
+params_i64_i32_i32_i32_i32_results_i32 = FunctionType(
+    (ValType.i64, ValType.i32, ValType.i32, ValType.i32, ValType.i32),
+    (ValType.i32,),
+)
+
 
 EEI_META = (
     ('useGas', useGas, params_i64_results_none),
     ('getAddress', getAddress, params_i32_results_none),
+    ('storageStore', storageStore, params_i32_i32_results_none),
+    ('callCode', callCode, params_i64_i32_i32_i32_i32_results_i32),
 )
 
 
@@ -296,7 +315,7 @@ class EWASMComputation(PetersburgComputation):
         runtime.register_module('ethereum', eei)
 
         contract_module = runtime.load_buffer(io.BytesIO(message.code))
-        contract = runtime.instantiate_module(contract_module)
+        contract, _ = runtime.instantiate_module(contract_module)
         # TODO: validate ewasm constraints
 
         # get function address
