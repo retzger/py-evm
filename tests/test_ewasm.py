@@ -1,6 +1,7 @@
 import enum
+import io
 import logging
-import os
+from pathlib import Path
 from typing import (
     NewType,
 )
@@ -27,8 +28,8 @@ from rlp.sedes import (
     CountableList,
 )
 
+from wasm import Runtime
 from wasm.datatypes import (
-    Configuration,
     ExportInstance,
     FunctionType,
     MemoryType,
@@ -36,8 +37,14 @@ from wasm.datatypes import (
     Store,
     ValType,
 )
+from wasm.execution import (
+    Configuration,
+)
 
 
+from eth.exceptions import (
+    Halt,
+)
 from eth.db import (
     get_db_backend,
 )
@@ -56,7 +63,16 @@ from eth.tools.fixtures import (
     normalize_statetest_fixture,
     should_run_slow_tests,
 )
-from eth.utils.db import (
+from eth.vm.message import (
+    Message,
+)
+from eth.vm.state import (
+    BaseState,
+)
+from eth.vm.transaction_context import (
+    BaseTransactionContext
+)
+from eth._utils.db import (
     apply_state_dict,
 )
 
@@ -128,6 +144,40 @@ EEI_META = (
     ('useGas', useGas, params_i64_results_none),
     ('getAddress', getAddress, params_i32_results_none),
 )
+
+
+class EWASMConfiguration(Configuration):
+    def __init__(self,
+                 store: Store,
+                 state: BaseState,
+                 message: Message,
+                 transaction_context: BaseTransactionContext,
+                 ) -> None:
+        super().__init__(store)
+
+        self.state = state
+        self.message = message
+        self.transaction_context = transaction_context
+
+
+class EWASMRuntime(Runtime):
+    def __init__(self,
+                 state: BaseState,
+                 message: Message,
+                 transaction_context: BaseTransactionContext,
+                 ) -> None:
+        self.state = state
+        self.message = message
+        self.transaction_context = transaction_context
+        super().__init__()
+
+    def get_configuration(self):
+        return EWASMConfiguration(
+            store=self.store,
+            state=self.state,
+            message=self.message,
+            transaction_context=self.transaction_context,
+        )
 
 
 def create_EEI_module(store: Store) -> ModuleInstance:
@@ -218,8 +268,77 @@ class EWASMBlock(PetersburgBlock):
     ]
 
 
+def is_ewasm(code: bytes) -> bool:
+    return code[:4] == b'\x00asm'
+
+
 class EWASMComputation(PetersburgComputation):
-    pass
+    @classmethod
+    def apply_computation(cls,
+                          state: BaseState,
+                          message: Message,
+                          transaction_context: BaseTransactionContext) -> 'BaseComputation':
+        """
+        Perform the computation that would be triggered by the VM message.
+        """
+        if is_ewasm(message.code):
+            cls.apply_ewasm_computation(state, message, transaction_context)
+        else:
+            cls.apply_evm_computation(state, message, transaction_context)
+
+    @classmethod
+    def apply_ewasm_computation(cls,
+                                state: BaseState,
+                                message: Message,
+                                transaction_context: BaseTransactionContext) -> 'BaseComputation':
+        runtime = EWASMRuntime(state, message, transaction_context)
+        eei = create_EEI_module(runtime.store)
+        runtime.register_module('ethereum', eei)
+
+        contract_module = runtime.load_buffer(io.BytesIO(message.code))
+        contract = runtime.instantiate_module(contract_module)
+        # TODO: validate ewasm constraints
+
+        # get function address
+        for export in contract.exports:
+            if export.is_function and export.name == 'main':
+                function_address = export.function_address
+                break
+        else:
+            raise Exception(f"No function found by name: {'main'}")
+
+        # invoke func
+        ret = runtime.invoke_function(function_address, ())
+        assert False
+
+        return ret
+
+    @classmethod
+    def apply_evm_computation(cls,
+                              state: BaseState,
+                              message: Message,
+                              transaction_context: BaseTransactionContext) -> 'BaseComputation':
+        with cls(state, message, transaction_context) as computation:
+            # Early exit on pre-compiles
+            if message.code_address in computation.precompiles:
+                computation.precompiles[message.code_address](computation)
+                return computation
+
+            for opcode in computation.code:
+                opcode_fn = computation.get_opcode_fn(opcode)
+
+                computation.logger.debug2(
+                    "OPCODE: 0x%x (%s) | pc: %s",
+                    opcode,
+                    opcode_fn.mnemonic,
+                    max(0, computation.code.pc - 1),
+                )
+
+                try:
+                    opcode_fn(computation=computation)
+                except Halt:
+                    break
+        return computation
 
 
 class EWASMState(PetersburgState):
@@ -234,10 +353,10 @@ class EWASMVM(PetersburgVM):
 #
 #  ACTUAL TEST FIXTURE EXECUTION
 #
-ROOT_PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+ROOT_PROJECT_DIR = Path(__file__).parent.parent
 
 
-BASE_FIXTURE_PATH = os.path.join(ROOT_PROJECT_DIR, 'fixtures', 'GeneralStateTests')
+BASE_FIXTURE_PATH = ROOT_PROJECT_DIR / 'ewasm-fixtures' / 'GeneralStateTests'
 
 
 logger = logging.getLogger('eth.tests.fixtures.ewasm')
@@ -280,7 +399,7 @@ def mark_statetest_fixtures(fixture_path, fixture_key, fixture_fork, fixture_ind
             return
         else:
             return pytest.mark.skip("Skipping slow test")
-    elif fixture.path.startswith('stEWASMTests/'):
+    elif fixture_path.startswith('stEWASMTests/'):
         return
     else:
         return pytest.mark.skip("Non-EWASM test")
@@ -309,7 +428,7 @@ def generate_ignore_fn_for_fork(metafunc):
 def pytest_generate_tests(metafunc):
     generate_fixture_tests(
         metafunc=metafunc,
-        base_fixture_path=BASE_FIXTURE_PATH,
+        base_fixture_path=str(BASE_FIXTURE_PATH),
         preprocess_fn=expand_fixtures_forks,
         filter_fn=filter_fixtures(
             ignore_fn=generate_ignore_fn_for_fork(metafunc),
